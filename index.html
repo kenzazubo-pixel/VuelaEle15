@@ -391,15 +391,17 @@ let S={
   activities:JSON.parse(localStorage.getItem("gse.v3.acts")||"[]"),
   results:JSON.parse(localStorage.getItem("gse.v3.results")||"[]"),
   infographies:JSON.parse(localStorage.getItem("gse.v3.infog")||"[]"),
+  flipClasses:JSON.parse(localStorage.getItem("gse.v3.flipClasses")||"[]"),
   play:null,mode:null,pName:"",pState:{},pFinished:false,startTime:0,
   livePlayers:[],liveIdx:0,liveScores:[],livePin:"",
   edAct:null,edType:"quiz",edData:{},
   prepTab:"flip",stationIdx:0,
   filterLevel:"Todos",filterInfogLevel:"Todos",
   flipQuizState:null,reflectionAnswer:"",reflectionDone:false,
+  flipClassesView:"library",selectedFlipClass:null,flipClassSearchLevel:"Todos",flipClassSearchTema:"Todos",
 };
 
-function save(){localStorage.setItem("gse.v3.acts",JSON.stringify(S.activities));localStorage.setItem("gse.v3.results",JSON.stringify(S.results));localStorage.setItem("gse.v3.infog",JSON.stringify(S.infographies))}
+function save(){localStorage.setItem("gse.v3.acts",JSON.stringify(S.activities));localStorage.setItem("gse.v3.results",JSON.stringify(S.results));localStorage.setItem("gse.v3.infog",JSON.stringify(S.infographies));localStorage.setItem("gse.v3.flipClasses",JSON.stringify(S.flipClasses))}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function pin4(){return String(1000+Math.floor(Math.random()*9000))}
 function notify(msg,ok=true){const n=document.getElementById("notif-el");n.textContent=msg;n.style.background=ok?"#D7FFB8":"#FFE8C7";n.style.color=ok?"#3C8200":"#A06400";n.style.borderColor=ok?"#58CC02":"#FF9600";n.style.display="block";clearTimeout(n._t);n._t=setTimeout(()=>n.style.display="none",3000)}
@@ -487,6 +489,11 @@ function vGames(){
 }
 
 function vPrepMenu(){
+  // Si hay una solicitud de biblioteca de clases invertidas, mostrarla
+  if(S.flipClassesView){
+    return vFlipClassesLibrary();
+  }
+  
   return`<div>
     <div class="section-label">Fase 01 · Metodología</div>
     <h2 class="section-title" style="margin-bottom:6px">Prepara tu clase</h2>
@@ -935,6 +942,55 @@ function vFlip(){
       </div>
     </div>
 
+    <!-- PANEL: GUARDAR COMO NUEVA CLASE -->
+    <div style="background:linear-gradient(135deg,rgba(201,168,76,.15),rgba(201,168,76,.05));border:2px solid rgba(201,168,76,.3);border-radius:16px;padding:24px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <span style="font-size:28px">💾</span>
+        <div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.25em;color:#C9A84C;font-weight:900">Guardar y compartir</div>
+          <div style="font-size:18px;font-weight:900;color:#fff">Guarda esta clase invertida en tu biblioteca</div>
+        </div>
+      </div>
+      
+      ${S.currentFlipClassId?`<div style="background:rgba(88,204,2,.15);border:1px solid rgba(88,204,2,.3);border-radius:12px;padding:12px;margin-bottom:12px;font-size:12px;color:#B3E535">✓ Clase cargada: <strong>${S.flipClasses.find(fc=>fc.id===S.currentFlipClassId)?.nombre||"Desconocida"}</strong></div>`:""}
+      
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px">
+        <div>
+          <label class="label" style="color:rgba(201,211,232,.6)">Nombre de la clase</label>
+          <input class="input" id="flip-nombre-clase" placeholder="Ej: El legado Andalusí">
+        </div>
+        <div>
+          <label class="label" style="color:rgba(201,211,232,.6)">Grupo</label>
+          <input class="input" id="flip-grupo-clase" placeholder="Ej: A1 Mañana">
+        </div>
+        <div>
+          <label class="label" style="color:rgba(201,211,232,.6)">Clase / Unidad</label>
+          <input class="input" id="flip-clase-numero" placeholder="Ej: Clase 1">
+        </div>
+        <div>
+          <label class="label" style="color:rgba(201,211,232,.6)">Nivel MCER</label>
+          <select class="input" id="flip-nivel-clase">
+            <option value="">— Selecciona nivel —</option>
+            <option value="A1">A1 (Principiante)</option>
+            <option value="A2">A2 (Elemental)</option>
+            <option value="B1">B1 (Intermedio)</option>
+            <option value="B2">B2 (Intermedio Alto)</option>
+            <option value="C1">C1 (Avanzado)</option>
+            <option value="C2">C2 (Dominio)</option>
+          </select>
+        </div>
+        <div style="grid-column:1/-1">
+          <label class="label" style="color:rgba(201,211,232,.6)">Tema o módulo</label>
+          <input class="input" id="flip-tema-clase" placeholder="Ej: Historia, Gramática, Cultura">
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-orange" onclick="saveFlipClassAs()" style="flex:1">💾 Guardar en biblioteca</button>
+        <button class="btn btn-blue" onclick="S.view='teacher';S.tab='prep';S.flipClassesView='library';render()" style="flex:1">📚 Mi biblioteca</button>
+      </div>
+    </div>
+
   </div>`;
 }
 
@@ -1011,6 +1067,124 @@ function flipQuizRemove(i){
   render();
 }
 
+// ===== FUNCIONES PARA GESTIONAR CLASES INVERTIDAS =====
+function saveFlipClassAs(){
+  const nombre=document.getElementById("flip-nombre-clase")?.value?.trim();
+  const grupo=document.getElementById("flip-grupo-clase")?.value?.trim();
+  const clase=document.getElementById("flip-clase-numero")?.value?.trim();
+  const nivel=document.getElementById("flip-nivel-clase")?.value;
+  const tema=document.getElementById("flip-tema-clase")?.value?.trim();
+  
+  if(!nombre||!grupo||!clase||!nivel||!tema){
+    notify("Completa todos los campos obligatorios",false);
+    return;
+  }
+  
+  const cfg=JSON.parse(localStorage.getItem("gse.v3.flip")||"{}");
+  const newClass={
+    id:uid(),
+    nombre,grupo,clase,nivel,tema,
+    createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString(),
+    // Contenido completo
+    media:cfg.media||"",
+    pdf:cfg.pdf||"",
+    label:cfg.label||"",
+    quiz:cfg.quiz||[],
+    reflectionQ:cfg.reflectionQ||"",
+    practica_ej:cfg.practica_ej||"",
+    practica_ficha:cfg.practica_ficha||"",
+    practica_pareja:cfg.practica_pareja||"",
+    desafio_correccion:cfg.desafio_correccion||"",
+    desafio_preguntas:cfg.desafio_preguntas||"",
+    desafio_proyecto:cfg.desafio_proyecto||"",
+    desafio_proyecto_titulo:cfg.desafio_proyecto_titulo||""
+  };
+  
+  S.flipClasses.push(newClass);
+  save();
+  notify(`✓ Clase invertida "${nombre}" guardada en la biblioteca`);
+  document.getElementById("flip-nombre-clase").value="";
+  document.getElementById("flip-grupo-clase").value="";
+  document.getElementById("flip-clase-numero").value="";
+  document.getElementById("flip-nivel-clase").value="";
+  document.getElementById("flip-tema-clase").value="";
+  render();
+}
+
+function loadFlipClass(id){
+  const flipClass=S.flipClasses.find(fc=>fc.id===id);
+  if(!flipClass)return;
+  
+  const cfg={
+    media:flipClass.media||"",
+    pdf:flipClass.pdf||"",
+    label:flipClass.label||"",
+    quiz:flipClass.quiz||[],
+    reflectionQ:flipClass.reflectionQ||"",
+    practica_ej:flipClass.practica_ej||"",
+    practica_ficha:flipClass.practica_ficha||"",
+    practica_pareja:flipClass.practica_pareja||"",
+    desafio_correccion:flipClass.desafio_correccion||"",
+    desafio_preguntas:flipClass.desafio_preguntas||"",
+    desafio_proyecto:flipClass.desafio_proyecto||"",
+    desafio_proyecto_titulo:flipClass.desafio_proyecto_titulo||""
+  };
+  
+  localStorage.setItem("gse.v3.flip",JSON.stringify(cfg));
+  S.selectedFlipClass=id;
+  notify(`✓ Clase invertida "${flipClass.nombre}" cargada`);
+  render();
+}
+
+function deleteFlipClass(id){
+  if(!confirm("¿Eliminar esta clase invertida de forma permanente?"))return;
+  const idx=S.flipClasses.findIndex(fc=>fc.id===id);
+  if(idx<0)return;
+  const name=S.flipClasses[idx].nombre;
+  S.flipClasses.splice(idx,1);
+  save();
+  if(S.selectedFlipClass===id)S.selectedFlipClass=null;
+  notify(`Clase invertida "${name}" eliminada`);
+  render();
+}
+
+function editFlipClass(id){
+  const flipClass=S.flipClasses.find(fc=>fc.id===id);
+  if(!flipClass)return;
+  S.selectedFlipClass=id;
+  S.flipClassesView="edit";
+  render();
+}
+
+function updateFlipClass(id){
+  const nombre=document.getElementById("edit-flip-nombre")?.value?.trim();
+  const grupo=document.getElementById("edit-flip-grupo")?.value?.trim();
+  const clase=document.getElementById("edit-flip-clase")?.value?.trim();
+  const nivel=document.getElementById("edit-flip-nivel")?.value;
+  const tema=document.getElementById("edit-flip-tema")?.value?.trim();
+  
+  if(!nombre||!grupo||!clase||!nivel||!tema){
+    notify("Completa todos los campos obligatorios",false);
+    return;
+  }
+  
+  const flipClass=S.flipClasses.find(fc=>fc.id===id);
+  if(!flipClass)return;
+  
+  flipClass.nombre=nombre;
+  flipClass.grupo=grupo;
+  flipClass.clase=clase;
+  flipClass.nivel=nivel;
+  flipClass.tema=tema;
+  flipClass.updatedAt=new Date().toISOString();
+  
+  save();
+  S.flipClassesView="library";
+  notify(`✓ Clase invertida actualizada`);
+  render();
+}
+
 function vStations(){
   const data=JSON.parse(localStorage.getItem("gse.v3.stations")||"[{},{},{}]");
   const s=S.stationIdx||0;
@@ -1061,6 +1235,122 @@ function saveStation(i){
   data[i]={title:document.getElementById("st-title").value,description:document.getElementById("st-desc").value,link:document.getElementById("st-link").value};
   localStorage.setItem("gse.v3.stations",JSON.stringify(data));
   notify("Estación guardada ✓");
+}
+
+// ===== VISTA: BIBLIOTECA DE CLASES INVERTIDAS =====
+function vFlipClassesLibrary(){
+  const view=S.flipClassesView||"library";
+  const lvlColors={"A1":"#58CC02","A2":"#86E004","B1":"#1CB0F6","B2":"#0E86C8","C1":"#CE82FF","C2":"#A050E0"};
+  
+  // Vista de edición
+  if(view==="edit"){
+    const fc=S.flipClasses.find(f=>f.id===S.selectedFlipClass);
+    if(!fc)return"";
+    return`<div>
+      <button class="back-link" onclick="S.flipClassesView='library';render()">← Cancelar</button>
+      <div style="background:rgba(15,27,61,.7);border:1px solid rgba(201,168,76,.3);border-radius:16px;padding:20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.25em;color:#C9A84C;font-weight:900;margin-bottom:4px">Editar clase invertida</div>
+        <h3 style="font-size:18px;font-weight:900;color:#fff;margin-bottom:16px">✏️ ${fc.nombre}</h3>
+        <div class="form-row" style="margin-bottom:12px">
+          <label class="label" style="color:rgba(201,211,232,.6)">Nombre de la clase</label>
+          <input class="input" id="edit-flip-nombre" value="${fc.nombre}" placeholder="Ej: El legado Andalusí">
+        </div>
+        <div class="form-2col" style="margin-bottom:12px">
+          <div>
+            <label class="label" style="color:rgba(201,211,232,.6)">Grupo</label>
+            <input class="input" id="edit-flip-grupo" value="${fc.grupo}" placeholder="Ej: A1 Mañana">
+          </div>
+          <div>
+            <label class="label" style="color:rgba(201,211,232,.6)">Clase/Unidad</label>
+            <input class="input" id="edit-flip-clase" value="${fc.clase}" placeholder="Ej: Clase 1">
+          </div>
+        </div>
+        <div class="form-2col" style="margin-bottom:12px">
+          <div>
+            <label class="label" style="color:rgba(201,211,232,.6)">Nivel MCER</label>
+            <select class="input" id="edit-flip-nivel">
+              <option value="">— Selecciona nivel —</option>
+              ${["A1","A2","B1","B2","C1","C2"].map(l=>`<option value="${l}" ${fc.nivel===l?"selected":""}>${l}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label class="label" style="color:rgba(201,211,232,.6)">Tema</label>
+            <input class="input" id="edit-flip-tema" value="${fc.tema}" placeholder="Ej: Historia, Gramática">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button class="btn btn-orange" onclick="updateFlipClass('${fc.id}')">💾 Guardar cambios</button>
+          <button class="btn btn-white" onclick="S.flipClassesView='library';render()">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  
+  // Vista principal: biblioteca
+  const filtered=S.flipClasses.filter(fc=>{
+    if(S.flipClassSearchLevel!=="Todos"&&fc.nivel!==S.flipClassSearchLevel)return false;
+    if(S.flipClassSearchTema!=="Todos"&&fc.tema!==S.flipClassSearchTema)return false;
+    return true;
+  });
+  
+  const temas=[...new Set(S.flipClasses.map(fc=>fc.tema))].filter(Boolean);
+  
+  return`<div>
+    <button class="back-link" onclick="S.flipClassesView=null;S.selectedFlipClass=null;S.view='teacher';S.tab='prep';render()">← Volver a preparación</button>
+    <div class="section-label">Preparación · Clases invertidas</div>
+    <h2 class="section-title" style="margin-bottom:16px">📚 Biblioteca de clases invertidas</h2>
+    
+    <!-- Filtros -->
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div>
+        <label class="label" style="color:rgba(201,211,232,.6)">Filtrar por nivel</label>
+        <select class="input" onchange="S.flipClassSearchLevel=this.value;render()" style="max-width:140px">
+          <option value="Todos">Todos</option>
+          ${["A1","A2","B1","B2","C1","C2"].map(l=>`<option value="${l}" ${S.flipClassSearchLevel===l?"selected":""}>${l}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label class="label" style="color:rgba(201,211,232,.6)">Filtrar por tema</label>
+        <select class="input" onchange="S.flipClassSearchTema=this.value;render()" style="max-width:180px">
+          <option value="Todos">Todos</option>
+          ${temas.map(t=>`<option value="${t}" ${S.flipClassSearchTema===t?"selected":""}>${t}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    
+    ${filtered.length===0
+      ?`<div style="text-align:center;padding:40px;border:2px dashed rgba(201,168,76,.2);border-radius:16px">
+          <div style="font-size:48px;margin-bottom:12px">📚</div>
+          <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:8px">Biblioteca vacía</div>
+          <p style="font-size:13px;color:rgba(201,211,232,.4)">Crea y guarda clases invertidas desde la sección de edición.</p>
+        </div>`
+      :`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
+        ${filtered.map(fc=>{
+          const lc=lvlColors[fc.nivel]||"#C9A84C";
+          return`<div style="background:rgba(30,58,95,.6);border:2px solid ${lc}33;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+              <div>
+                <div style="font-size:14px;font-weight:900;color:#fff;margin-bottom:6px">${fc.nombre}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                  <span style="padding:2px 8px;border-radius:6px;font-size:10px;font-weight:900;background:${lc}22;color:${lc};border:1px solid ${lc}">${fc.nivel}</span>
+                  <span style="padding:2px 8px;border-radius:6px;font-size:10px;font-weight:900;background:rgba(206,130,255,.2);color:#CE82FF;border:1px solid rgba(206,130,255,.4)">${fc.tema}</span>
+                </div>
+              </div>
+            </div>
+            <div style="font-size:11px;color:rgba(201,211,232,.5);line-height:1.4">
+              <div>👥 ${fc.grupo}</div>
+              <div>📖 ${fc.clase}</div>
+              <div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(201,168,76,.1);color:rgba(201,211,232,.3)">Actualizado: ${new Date(fc.updatedAt).toLocaleDateString()}</div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:auto">
+              <button class="btn btn-sm btn-blue" onclick="loadFlipClass('${fc.id}')" style="flex:1">▶ Cargar</button>
+              <button class="btn btn-sm" style="background:#CE82FF;color:#fff;border-bottom:2px solid #A050E0;flex:1" onclick="editFlipClass('${fc.id}')">✏️ Editar</button>
+              <button class="btn btn-sm btn-red" onclick="deleteFlipClass('${fc.id}')" style="flex:1">🗑 Borrar</button>
+            </div>
+          </div>`;
+        }).join("")}
+      </div>`}
+  </div>`;
 }
 
 function uploadInfog(input){
